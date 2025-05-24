@@ -1,9 +1,11 @@
-import { StyleSheet, Button } from 'react-native';
+import { StyleSheet, Button, TouchableOpacity } from 'react-native';
 import { Text, View } from '@/components/Themed';
 import PermissionScreen from '@/components/PermissionScreen';
 import TextRecognition, {TextRecognitionResult } from '@react-native-ml-kit/text-recognition';
 import { Camera, useCameraDevices, useCameraPermission } from 'react-native-vision-camera';
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useCallback } from 'react';
+import {Gesture, GestureDetector, GestureHandlerRootView} from 'react-native-gesture-handler';
+import { runOnJS } from 'react-native-reanimated';
 
 export default function CameraScreen() {
   const { hasPermission, requestPermission } = useCameraPermission();
@@ -12,6 +14,17 @@ export default function CameraScreen() {
   const camera = useRef<Camera>(null);
   const [recognizedText, setRecognizedText] = useState<string>('');
   const [processing, setProcessing] = useState(false);
+
+  const focus = useCallback((point: { x: number; y: number }) => {
+    const c = camera.current;
+    if (c == null) return;
+    c.focus(point);
+  }, []);
+
+  const gesture = Gesture.Tap()
+    .onEnd(({ x, y }) => {
+      runOnJS(focus)({ x, y });
+    });
 
   const recognizeText = async () => {
     if (camera.current && !processing) {
@@ -49,20 +62,32 @@ export default function CameraScreen() {
 
   return (
     <View style={styles.container}>
-      <Camera
-        ref={camera}
-        style={styles.camera}
-        device={device}
-        isActive={true}
-        photo={true}
-      />
-      
+      <GestureHandlerRootView>
+
+        <GestureDetector gesture={gesture}>
+          <Camera
+            ref={camera}
+            style={styles.camera}
+            device={device}
+            isActive={true}
+            photo={true}
+          />
+        </GestureDetector>
+      </GestureHandlerRootView>
+
+
       <View style={styles.controlsContainer}>
-        <Button 
-          title={processing ? "Processing..." : "Scan Text"} 
-          onPress={recognizeText}
-          disabled={processing} 
-        />
+      <TouchableOpacity style={styles.custombuttonview}
+          onPress={() => recognizeText()}>
+          <Text style={styles.buttonText}>Scan Text</Text>
+        </TouchableOpacity>
+
+        <View style={styles.separator} lightColor="#eee" darkColor="rgba(255,255,255,0.1)" />
+
+        <TouchableOpacity style={styles.custombuttonview}
+          onPress={() => setRecognizedText('')}>
+          <Text style={styles.buttonText}>Clear Scanned Text</Text>
+        </TouchableOpacity>
         
         <View style={styles.resultContainer}>
           <Text style={styles.title}>Recognized Text:</Text>
@@ -101,8 +126,23 @@ const styles = StyleSheet.create({
     color: '#000',
   },
   separator: {
-    marginVertical: 10,
+    marginVertical: 3,
     height: 1,
     width: '100%',
+  },
+
+  custombuttonview: {
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#fff',
+    overflow: 'hidden',
+    backgroundColor:"#007AFF",
+  },
+
+  buttonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: 'bold',
+    textAlign: 'center',
   },
 });

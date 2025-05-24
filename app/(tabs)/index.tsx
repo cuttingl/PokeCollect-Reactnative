@@ -1,4 +1,6 @@
-import { StyleSheet } from 'react-native';
+import { StyleSheet, Platform } from 'react-native';
+
+import { StatusBar } from 'expo-status-bar';
 
 import EditScreenInfo from '@/components/EditScreenInfo';
 import { Text, View } from '@/components/Themed';
@@ -6,9 +8,8 @@ import { Text, View } from '@/components/Themed';
 export default function TabOneScreen() {
   return (
     <View style={styles.container}>
-      <Text style={styles.title}>Tab One</Text>
-      <View style={styles.separator} lightColor="#eee" darkColor="rgba(255,255,255,0.1)" />
-      <EditScreenInfo path="app/(tabs)/index.tsx" />
+      <Text style={styles.title}>Exported Text from Card</Text>
+      <StatusBar style={Platform.OS === 'ios' ? 'light' : 'auto'} />
     </View>
   );
 }

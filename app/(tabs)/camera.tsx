@@ -1,4 +1,4 @@
-import { StyleSheet, Button, TouchableOpacity } from 'react-native';
+import { StyleSheet } from 'react-native';
 import { Text, View } from '@/components/Themed';
 import PermissionScreen from '@/components/PermissionScreen';
 import TextRecognition, { TextRecognitionResult } from '@react-native-ml-kit/text-recognition';
@@ -7,18 +7,35 @@ import React, { useState, useRef, useCallback } from 'react';
 import { Gesture, GestureDetector, GestureHandlerRootView } from 'react-native-gesture-handler';
 import { runOnJS } from 'react-native-reanimated';
 import Animated, { useSharedValue, useAnimatedStyle, withTiming, withSequence } from 'react-native-reanimated';
+import { router } from 'expo-router';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 export default function CameraScreen() {
   const { hasPermission, requestPermission } = useCameraPermission();
   const devices = useCameraDevices();
   const device = devices.find((d) => d.position === 'back');
   const camera = useRef<Camera>(null);
-  const [recognizedText, setRecognizedText] = useState<string>('');
   const [processing, setProcessing] = useState(false);
   const [focusPoint, setFocusPoint] = useState<{ x: number; y: number } | null>(null);
 
   const focusOpacity = useSharedValue(0);
   const focusScale = useSharedValue(1);
+
+  const saveRecognizedText = async (text: string) => {
+    try {
+      const existingTexts = await AsyncStorage.getItem('recognizedTexts');
+      const texts = existingTexts ? JSON.parse(existingTexts) : [];
+      const newEntry = {
+        text: text.trim(),
+        timestamp: new Date().toISOString(),
+      };
+      texts.push(newEntry);
+      await AsyncStorage.setItem('recognizedTexts', JSON.stringify(texts));
+      router.push('/(tabs)');
+    } catch (error) {
+      console.error('Error saving text:', error);
+    }
+  };
 
   const focus = useCallback((point: { x: number; y: number }) => {
     const c = camera.current;
@@ -37,32 +54,30 @@ export default function CameraScreen() {
     c.focus(point);
   }, []);
 
-  const gesture = Gesture.Tap()
-    .onEnd(({ x, y }) => {
-      runOnJS(focus)({ x, y });
-    });
-
   const recognizeText = async () => {
     if (camera.current && !processing) {
       try {
         setProcessing(true);
-
-        // Take a photo
         const photo = await camera.current.takePhoto({
           flash: 'off',
         });
-        // Process the image
         const result: TextRecognitionResult = await TextRecognition.recognize(`file://${photo.path}`);
-        // Update state with the recognized text
-        setRecognizedText(result.text);
+        if (result.text.trim()) {
+          await saveRecognizedText(result.text);
+        }
       } catch (error) {
         console.error('Text recognition error:', error);
-        setRecognizedText('Error recognizing text');
       } finally {
         setProcessing(false);
       }
     }
   };
+
+  const gesture = Gesture.Tap()
+    .onEnd(({ x, y }) => {
+      runOnJS(focus)({ x, y });
+      runOnJS(recognizeText)();
+    });
 
   const focusCircleStyle = useAnimatedStyle(() => {
     return {
@@ -77,13 +92,13 @@ export default function CameraScreen() {
 
   return (
     <View style={styles.container}>
-      <GestureHandlerRootView style={{ flex: 1 }}>
+      <GestureHandlerRootView style={styles.container}>
         <GestureDetector gesture={gesture}>
-          <View style={{ flex: 1 }}>
+          <View style={styles.container}>
             {device && (
               <Camera
                 ref={camera}
-                style={{ flex: 1 }}
+                style={styles.camera}
                 device={device}
                 isActive={true}
                 photo={true}
@@ -108,31 +123,19 @@ export default function CameraScreen() {
                 ]}
               />
             )}
+
+            {processing && (
+              <View style={styles.processingOverlay}>
+                <Text style={styles.processingText}>Processing...</Text>
+              </View>
+            )}
           </View>
         </GestureDetector>
       </GestureHandlerRootView>
-      <View style={styles.controlsContainer}>
-        <TouchableOpacity style={styles.custombuttonview}
-          onPress={() => recognizeText()}>
-          <Text style={styles.buttonText}>Scan Text</Text>
-        </TouchableOpacity>
-
-        <View style={styles.separator} lightColor="#eee" darkColor="rgba(255,255,255,0.1)" />
-
-        <TouchableOpacity style={styles.custombuttonview}
-          onPress={() => setRecognizedText('')}>
-          <Text style={styles.buttonText}>Clear Scanned Text</Text>
-        </TouchableOpacity>
-
-        <View style={styles.resultContainer}>
-          <Text style={styles.title}>Recognized Text:</Text>
-          <View style={styles.separator} lightColor="#eee" darkColor="rgba(255,255,255,0.1)" />
-          <Text>{recognizedText || "No text recognized yet"}</Text>
-        </View>
-      </View>
     </View>
   );
 }
+
 const styles = StyleSheet.create({
   container: {
     flex: 1,
@@ -140,43 +143,19 @@ const styles = StyleSheet.create({
   camera: {
     flex: 1,
   },
-  controlsContainer: {
+  processingOverlay: {
     position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
-    padding: 20,
-    backgroundColor: 'rgba(0,0,0,0.5)',
-  },
-  resultContainer: {
-    marginTop: 20,
+    top: 50,
+    left: 20,
+    right: 20,
+    backgroundColor: 'rgba(0,0,0,0.7)',
     padding: 10,
-    backgroundColor: 'rgba(255,255,255,0.8)',
     borderRadius: 5,
+    alignItems: 'center',
   },
-  title: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#000',
-  },
-  separator: {
-    marginVertical: 3,
-    height: 1,
-    width: '100%',
-  },
-
-  custombuttonview: {
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: '#fff',
-    overflow: 'hidden',
-    backgroundColor: "#007AFF",
-  },
-
-  buttonText: {
-    color: '#fff',
+  processingText: {
+    color: 'white',
     fontSize: 16,
     fontWeight: 'bold',
-    textAlign: 'center',
   },
 });
